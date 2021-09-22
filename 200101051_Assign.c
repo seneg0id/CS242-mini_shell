@@ -28,9 +28,7 @@ int parsePipe(char* str, char** strpiped);
 void parseSpace(char* str, char** parsed);
 int processString(char* str, char** parsed, char** parsedpipe);
 
-
-// test changes 
-// main function 
+ 
 int main()
 {
     signal(SIGINT,sig_handler);
