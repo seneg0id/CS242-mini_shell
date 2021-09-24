@@ -9,12 +9,12 @@
 #include <sys/mman.h>
 #include <errno.h>
 
-#define INPUT_SIZE 510 //The length of the maximum string for the user
+#define INPUT_SIZE 1024 //The length of the maximum string for the user
 #define CUTTING_WORD " \n"//For dividing a string into single words (using in strtok)
-#define ENDING_WORD "done"//Program end word
+#define ENDING_WORD "exit"//Program end word
 #define RESET 0
 
-/*****************************Private Function declaration******************************/
+// Private Function declaration
 void sig_handler(int signo);
 char *getcwd(char *buf, size_t size);//show the path Of the current folder
 void  DisplayPrompt();//Display Prompt : user@currect dir>
@@ -43,20 +43,19 @@ int main() {
     
     char input[INPUT_SIZE]="";//A string array containing the input.
     DisplayPrompt();
-    pid_t id; // pid_t use for process identifer
-    char **argv;//A string array will containing the program name and command arguments
+    pid_t id; // pid_t used for process identifer
+    char **argv;//A string array containing the program name and command arguments
 
 
     while (strcmp(input,ENDING_WORD)!=RESET)
     {
         if(fgets(input,INPUT_SIZE,stdin)==RESET)//get the input from the user
             printf(" ");
-        //do nothing...countine regular
        
         char* inputCopy=strdup(input);
 
         if (strcmp(input,"\n")==RESET)
-        {goto lable;}//if the user click only enter
+        {goto lable;}//if the user clicks only enter
        
         else{
             argv=execFunction(input,argv,&sizeOfArray,cmdLength);//split the commands
@@ -69,7 +68,7 @@ int main() {
                 free(inputCopy);
             }
             
-            else if (strcmp("cd",argv[RESET])==RESET)//if the user try cd command
+            else if (strcmp("cd",argv[RESET])==RESET)//if the user tries cd command
             {
 
                 struct passwd *pwd;
@@ -115,8 +114,6 @@ int main() {
 
                         printf("Num of cmd: %d\n", *numOfCmd-1);
                         printf("cmd length: %d\n", *cmdLength-4);
-
-                        printf("Bye !\n");
                     }
                 }
 
@@ -150,7 +147,7 @@ void ArrayOfSymbol(char* symbol,char* inputCopy,int place,char** argv,int sizeOf
     char** command1;char** command2;int size1=0,size2=0,j;
     char* before=strndup(inputCopy,place);
     char* after=strdup(inputCopy+strlen(before)+1);
-    /*********************copy left side command************************************/
+    //copy left side command
     for (int i = 0; i < sizeOfArray; i++) {
         if (strcmp(argv[i], "|") != 0) {
             size1++;
@@ -169,7 +166,7 @@ void ArrayOfSymbol(char* symbol,char* inputCopy,int place,char** argv,int sizeOf
     }
     command1[j]=NULL;
 
-    /*********************copy right side command************************************/
+    //copy right side command
     for (int i = size1+1; i < sizeOfArray; i++) {
         if (argv[i]!= NULL) {
             size2++;
@@ -188,7 +185,6 @@ void ArrayOfSymbol(char* symbol,char* inputCopy,int place,char** argv,int sizeOf
     }
     command2[j]=NULL;
 
-    /**********************************************************/
     free(after);
     free(before);
     LeftRightPipe(symbol, command1, command2,argv);
@@ -205,7 +201,7 @@ void LeftRightPipe(char* symbol,char** command1,char** command2,char** argv)
 
         pid_t leftPid,rightPid;
         int pipe_descs[2];
-        if (pipe(pipe_descs) == -1)//first son - which write to the pipe
+        if (pipe(pipe_descs) == -1)//first child - which writes to the pipe
         {
             perror("cannot open pipe");
             exit(EXIT_FAILURE);
@@ -214,10 +210,10 @@ void LeftRightPipe(char* symbol,char** command1,char** command2,char** argv)
         {
             dup2(pipe_descs[1],STDOUT_FILENO);//change the default output (channel 1) to pipe[1]
             execvp(command1[0],command1);
-            close(pipe_descs[0]);//clouse the read output
+            close(pipe_descs[0]);//close the read output
             close(pipe_descs[1]);
            // releaseMemory(command1);
-        }else if (rightPid = fork() == 0)//if we are in the son number 2
+        }else if (rightPid = fork() == 0)//if we are in the child number 2
             {
 
                 dup2(pipe_descs[0], STDIN_FILENO);//change the default input 0 to pipe[0]
@@ -233,16 +229,16 @@ void LeftRightPipe(char* symbol,char** command1,char** command2,char** argv)
             close(pipe_descs[1]);
 
             waitpid(leftPid, &status, 0);
-            if (!WIFEXITED(status))//if the creation of the command faild
+            if (!WIFEXITED(status))//if the creation of the command failed
             {
-                fprintf(stderr, "son failed");
+                fprintf(stderr, "child failed");
                 exit(1);
             }
                 waitpid(rightPid,&status,0);
 
-                if(!WIFEXITED(status))//if the creation of the command faild
+                if(!WIFEXITED(status))//if the creation of the command failed
                 {
-                    fprintf(stderr,"son failed");
+                    fprintf(stderr,"child failed");
                     exit(1);
                 }
         }
@@ -263,7 +259,7 @@ int checkSymbol(char* symbol,char* input)
     return -1;
 }
 
-/*release the memory from the argv*/
+//release the memory from the argv
 void garbageCollector(char** argv,int size)
 {
     int i=RESET;
@@ -275,7 +271,7 @@ void garbageCollector(char** argv,int size)
 }
 
 
-/*split the input from the user to sub strings*/
+//split the input from the user to sub strings
 char** execFunction(char *input,char **argv,int *sizeOfArray,int *cmdLength)
 {
     int i=RESET,counter=RESET;
@@ -322,11 +318,11 @@ char** execFunction(char *input,char **argv,int *sizeOfArray,int *cmdLength)
 }
 
 
-/*show the prompt to the screen*/
+//show the prompt on the screen
 void DisplayPrompt()
 {
 
-//-------------------show the path-----------------------------
+// show the path
 
     long size;
     char *buf;
@@ -338,7 +334,7 @@ void DisplayPrompt()
         ptr = getcwd(buf, (size_t)size);
 
 
-    //----------show the user name root------------------------
+    //show the user name root
 
     struct passwd *getpwuid(uid_t uid);
     struct passwd *p;
