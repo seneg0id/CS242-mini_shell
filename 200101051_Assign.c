@@ -10,6 +10,7 @@
 #include <errno.h>
 
 #define INPUT_SIZE 1024 //The length of the maximum string for the user
+#define clear() printf("\033[H\033[J") // Clearing the shell using escape sequences
 #define CUTTING_WORD " \n"//For dividing a string into single words (using in strtok)
 #define ENDING_WORD "exit"//Program end word
 #define RESET 0
@@ -321,6 +322,7 @@ char** execFunction(char *input,char **argv,int *sizeOfArray,int *cmdLength)
 //show the prompt on the screen
 void DisplayPrompt()
 {
+    clear();
 
 // show the path
 
