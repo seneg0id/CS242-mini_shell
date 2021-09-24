@@ -1,280 +1,132 @@
-// C Program to design a shell in Linux
-#include<stdio.h>
-#include<string.h>
-#include<stdlib.h>
-#include<unistd.h>
-#include<sys/types.h>
-#include<sys/wait.h>
 #include <signal.h>
-#include<readline/readline.h>
-#include<readline/history.h>
+#include <stdio.h>
+#include <sys/types.h>
+#include <pwd.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <sys/wait.h>
+#include <string.h>
+#include <sys/mman.h>
+#include <errno.h>
 
-#define MAXL 1000 // max number of letters to be supported
-#define MAXC 100 // max number of commands to be supported
+#define INPUT_SIZE 510 //The length of the maximum string for the user
+#define CUTTING_WORD " \n"//For dividing a string into single words (using in strtok)
+#define ENDING_WORD "done"//Program end word
+#define RESET 0
 
-// Clearing the shell using escape sequences
-#define clear() printf("\033[H\033[J")
-
-// Private Function declarations
+/*****************************Private Function declaration******************************/
 void sig_handler(int signo);
-void init_shell();
-int takeInput(char* str);
-void printD();
-void execArgs(char** parsed);
-void execArgsPiped(char** parsed, char** parsedpipe);
-void help();
-int ownCmdHandler(char** parsed);
-int parsePipe(char* str, char** strpiped);
-void parseSpace(char* str, char** parsed);
-int processString(char* str, char** parsed, char** parsedpipe);
+char *getcwd(char *buf, size_t size);//show the path Of the current folder
+void  DisplayPrompt();//Display Prompt : user@currect dir>
+void releaseMemory(char** argv);
+int checkSymbol(char* symbol,char* input);
+void garbageCollector(char** argv,int size); //Memory Release
+char** execFunction(char *input,char **argv,int *sizeOfArray,int *cmdLength);  //Preparation of a receiver input as an expense
+void ArrayOfSymbol(char* symbol,char* input,int argc,char** argv,int sizeOfArray);
+void LeftRightPipe(char* symbol,char** command1,char** command2,char** argv);
 
- 
-int main()
-{
+static int *numOfCmd;
+static int *cmdLength;
+
+
+int main() {
     signal(SIGINT,sig_handler);
+    
+    numOfCmd = mmap(NULL, sizeof *numOfCmd, PROT_READ | PROT_WRITE,
+                    MAP_SHARED | MAP_ANONYMOUS, -1, RESET);
+    cmdLength = mmap(NULL, sizeof *cmdLength, PROT_READ | PROT_WRITE,
+                     MAP_SHARED | MAP_ANONYMOUS, -1, RESET);
+    
+    (*numOfCmd)=RESET;
+    (*cmdLength)=RESET;
+    int sizeOfArray=RESET;
+    
+    char input[INPUT_SIZE]="";//A string array containing the input.
+    DisplayPrompt();
+    pid_t id; // pid_t use for process identifer
+    char **argv;//A string array will containing the program name and command arguments
 
-    char inputString[MAXL], *parsedArgs[MAXC];
-    char* parsedArgsPiped[MAXC];
-    int execFlag = 0;
-    init_shell();
 
-    while (1) {
-        // print shell line
-        printD();
-        // take input
-        if (takeInput(inputString))
-            continue;
-        // process
-        execFlag = processString(inputString,
-        parsedArgs, parsedArgsPiped);
-        // execflag returns zero if there is no command
-        // or it is a builtin command,
-        // 1 if it is a simple command
-        // 2 if it is including a pipe.
+    while (strcmp(input,ENDING_WORD)!=RESET)
+    {
+        if(fgets(input,INPUT_SIZE,stdin)==RESET)//get the input from the user
+            printf(" ");
+        //do nothing...countine regular
+       
+        char* inputCopy=strdup(input);
 
-        // execute
-        if (execFlag == 1)
-            execArgs(parsedArgs);
+        if (strcmp(input,"\n")==RESET)
+        {goto lable;}//if the user click only enter
+       
+        else{
+            argv=execFunction(input,argv,&sizeOfArray,cmdLength);//split the commands
+           
+            int place=checkSymbol("|",inputCopy);
+            if(place!=-1) {
 
-        if (execFlag == 2)
-            execArgsPiped(parsedArgs, parsedArgsPiped);
-    }
-    return 0;
-}
-
-int processString(char* str, char** parsed, char** parsedpipe){
-
-    char* strpiped[2];
-    int piped = 0;
-
-    piped = parsePipe(str, strpiped);
-
-    if (piped) {
-        parseSpace(strpiped[0], parsed);
-        parseSpace(strpiped[1], parsedpipe);
-
-    } else {
-
-        parseSpace(str, parsed);
-    }
-
-    if (ownCmdHandler(parsed))
-        return 0;
-    else
-        return 1 + piped;
-}
-
-// function for parsing command words
-void parseSpace(char* str, char** parsed){
-    int i;
-
-    for (i = 0; i < MAXC; i++) {
-        parsed[i] = strsep(&str, " ");
-
-        if (parsed[i] == NULL)
-            break;
-        if (strlen(parsed[i]) == 0)
-            i--;
-    }
-}
-
-// function for finding pipe
-int parsePipe(char* str, char** strpiped)
-{
-    int i;
-    for (i = 0; i < 2; i++) {
-        strpiped[i] = strsep(&str, "|");
-        if (strpiped[i] == NULL)
-            break;
-    }
-
-    if (strpiped[1] == NULL)
-        return 0; // returns zero if no pipe is found.
-    else {
-        return 1;
-    }
-}
-
-// Function to execute builtin commands
-int ownCmdHandler(char** parsed)
-{
-    int NoOfOwnCmds = 3, i, switchOwnArg = 0;
-    char* OwnCmds[NoOfOwnCmds];
-    char* username;
-
-    OwnCmds[0] = "exit";
-    OwnCmds[1] = "cd";
-    OwnCmds[2] = "help";
-
-    for (i = 0; i < NoOfOwnCmds; i++) {
-        if (strcmp(parsed[0], OwnCmds[i]) == 0) {
-            switchOwnArg = i + 1;
-            break;
-        }
-    }
-
-    switch (switchOwnArg) {
-    case 1:
-        exit(0);
-    case 2:
-        chdir(parsed[1]);
-        return 1;
-    case 3:
-        help();
-        return 1;
-    default:
-        break;
-    }
-
-    return 0;
-}
-
-// Help command builtin
-void help()
-{
-    puts("\nList of Commands supported:"
-        "\n>'man', 'which', 'chsh', 'whereis', 'passwd', 'date', 'cal', 'clear', 'sleep',"
-        "'apropos', 'exit', 'shutdown', 'ls', 'cat', 'more', 'less', 'touch', 'cp',"
-        "'mv', 'rm', 'script', 'find', 'mkdir', 'cd', 'pwd', 'rmdir', 'chmod', 'grep'\n"
-        "\n>pipe handling"
-        "\n>improper space handling\n"
-        "\n>List of Commands not supported"
-        "\n> 'alias', 'unalias', 'history', 'logout'");
-
-    return;
-}
-
-// Function where the piped system commands is executed
-void execArgsPiped(char** parsed, char** parsedpipe)
-{
-    // 0 is read end, 1 is write end
-    int pipefd[2];
-    pid_t p1, p2;
-
-    if (pipe(pipefd) < 0) {
-        printf("\nPipe could not be initialized");
-        return;
-    }
-    p1 = fork();
-    if (p1 < 0) {
-        printf("\nCould not fork");
-        return;
-    }
-
-    if (p1 == 0) {
-        // Child 1 executing..
-        // It only needs to write at the write end
-        close(pipefd[0]);
-        dup2(pipefd[1], STDOUT_FILENO);
-        close(pipefd[1]);
-
-        if (execvp(parsed[0], parsed) < 0) {
-            printf("\ncommand 1 not found");
-            exit(0);
-        }
-    } else {
-        // Parent executing
-        p2 = fork();
-
-        if (p2 < 0) {
-            printf("\nCould not fork");
-            return;
-        }
-
-        // Child 2 executing..
-        // It only needs to read at the read end
-        if (p2 == 0) {
-            close(pipefd[1]);
-            dup2(pipefd[0], STDIN_FILENO);
-            close(pipefd[0]);
-            if (execvp(parsedpipe[0], parsedpipe) < 0) {
-                printf("\ncommand 2 not found");
-                exit(0);
+                ArrayOfSymbol("|",inputCopy,place,argv,sizeOfArray);
+                garbageCollector(argv,sizeOfArray);
+                free(inputCopy);
             }
-        } else {
-            // parent executing, waiting for two children
-            wait(NULL);
-            wait(NULL);
+            
+            else if (strcmp("cd",argv[RESET])==RESET)//if the user try cd command
+            {
+
+                struct passwd *pwd;
+                char* path=argv[1];
+
+                if(path==NULL)
+                {
+                    pwd=getpwuid(getuid());
+                    path=pwd->pw_dir;
+                }
+                if(path[0]=='/')
+                    (path)=++(path);
+                errno=chdir(path);
+                DisplayPrompt();
+                if(errno!=RESET)
+                    printf("error changing dircatory");
+                garbageCollector(argv,sizeOfArray);
+            }
+            else
+            {
+                id=fork();//make new prosses
+                if (id<RESET)
+                {
+                    printf("fork failed");
+                    exit(RESET);
+                }
+                else if(id==RESET) {
+                    (*numOfCmd)++;
+
+                    execvp(argv[RESET],argv);
+                    if(strcmp(input,ENDING_WORD)!=RESET)
+                        printf("command not found\n");
+                    exit(1);
+                }else {
+                    wait(&id);
+                    free(inputCopy);
+                    garbageCollector(argv,sizeOfArray);
+                    lable:
+                    if (strcmp(input,ENDING_WORD) != RESET)
+                    {
+                        DisplayPrompt();
+                    }                else {
+
+                        printf("Num of cmd: %d\n", *numOfCmd-1);
+                        printf("cmd length: %d\n", *cmdLength-4);
+
+                        printf("Bye !\n");
+                    }
+                }
+
+            }
         }
     }
+    return RESET;
 }
 
-// Function where the system command is executed
-void execArgs(char** parsed)
-{
-    // Forking a child
-    pid_t pid = fork();
 
-    if (pid == -1) {
-        printf("\nFailed forking child..");
-        return;
-    } else if (pid == 0) {
-        if (execvp(parsed[0], parsed) < 0) {
-            printf("\ncommand not found");
-        }
-        exit(0);
-    } else {
-        // waiting for child to terminate
-        wait(NULL);
-        return;
-    }
-}
-
-// Function to print Current Directory.
-void printD()
-{
-    char cwd[1024];
-    getcwd(cwd, sizeof(cwd));
-    printf("\nDir: %s", cwd);
-}
-
-// Function to take input
-int takeInput(char* str)
-{
-    char* buf;
-
-    buf = readline("\n>>> ");
-    if (strlen(buf) != 0) {
-        add_history(buf);
-        strcpy(str, buf);
-        return 0;
-    } else {
-        return 1;
-    }
-}
-
-// Greeting shell during startup
-void init_shell()
-{
-    clear();
-    printf("USER is: @%s\n", getenv("USER"));
-    printf("HOME is: @%s\n", getenv("HOME"));
-    printf("SHELL is: @%s\n", getenv("SHELL"));
-    printf("TERM is: @%s\n", getenv("TERM"));
-    sleep(1);
-}
-
-// to handle SIGINT
 void sig_handler(int signo)
 {
     signal(SIGINT,sig_handler);
@@ -282,4 +134,219 @@ void sig_handler(int signo)
     sigset_t curr_mask;
     sigfillset(&curr_mask);
     sigprocmask(SIG_SETMASK,&curr_mask,NULL);
+}
+void releaseMemory(char** argv)
+{
+    for (int i = 0; argv[i]!=NULL ; i++) {
+        free(argv[i]);
+    }
+    free(argv);
+}
+
+
+void ArrayOfSymbol(char* symbol,char* inputCopy,int place,char** argv,int sizeOfArray)
+{
+
+    char** command1;char** command2;int size1=0,size2=0,j;
+    char* before=strndup(inputCopy,place);
+    char* after=strdup(inputCopy+strlen(before)+1);
+    /*********************copy left side command************************************/
+    for (int i = 0; i < sizeOfArray; i++) {
+        if (strcmp(argv[i], "|") != 0) {
+            size1++;
+        }else
+        break;
+    }
+
+
+    command1=(char**)malloc(sizeof(char*)*size1+1);
+
+
+    for ( j = 0; j < size1; j++) {
+
+        command1[j]=(char*)malloc(sizeof(char)*(strlen(argv[j])));
+        strncpy(command1[j],argv[j],strlen(argv[j]));
+    }
+    command1[j]=NULL;
+
+    /*********************copy right side command************************************/
+    for (int i = size1+1; i < sizeOfArray; i++) {
+        if (argv[i]!= NULL) {
+            size2++;
+        }else
+            break;
+    }
+
+
+    command2=(char**)malloc(sizeof(char*)*size2+1);
+
+
+    for ( j = 0; j < size2; j++) {
+
+        command2[j]=(char*)malloc(sizeof(char)*(strlen(argv[j])));
+        strncpy(command2[j],argv[j+size1+1],strlen(argv[j+size1+1])+1);
+    }
+    command2[j]=NULL;
+
+    /**********************************************************/
+    free(after);
+    free(before);
+    LeftRightPipe(symbol, command1, command2,argv);
+      releaseMemory(command2);
+      releaseMemory(command1);
+    return;
+}
+
+void LeftRightPipe(char* symbol,char** command1,char** command2,char** argv)
+{
+
+    int status=0;
+    if(strcmp(symbol,"|")==0) {
+
+        pid_t leftPid,rightPid;
+        int pipe_descs[2];
+        if (pipe(pipe_descs) == -1)//first son - which write to the pipe
+        {
+            perror("cannot open pipe");
+            exit(EXIT_FAILURE);
+        }
+        if(leftPid=fork()==0)//if its pipe
+        {
+            dup2(pipe_descs[1],STDOUT_FILENO);//change the default output (channel 1) to pipe[1]
+            execvp(command1[0],command1);
+            close(pipe_descs[0]);//clouse the read output
+            close(pipe_descs[1]);
+           // releaseMemory(command1);
+        }else if (rightPid = fork() == 0)//if we are in the son number 2
+            {
+
+                dup2(pipe_descs[0], STDIN_FILENO);//change the default input 0 to pipe[0]
+                close(pipe_descs[0]);
+                close(pipe_descs[1]);
+                execvp(command2[0], command2);
+              //  releaseMemory(command2);
+            }
+            else
+        {
+
+            close(pipe_descs[0]);
+            close(pipe_descs[1]);
+
+            waitpid(leftPid, &status, 0);
+            if (!WIFEXITED(status))//if the creation of the command faild
+            {
+                fprintf(stderr, "son failed");
+                exit(1);
+            }
+                waitpid(rightPid,&status,0);
+
+                if(!WIFEXITED(status))//if the creation of the command faild
+                {
+                    fprintf(stderr,"son failed");
+                    exit(1);
+                }
+        }
+
+    return;
+    }
+}
+
+
+int checkSymbol(char* symbol,char* input)
+{
+    int potision;
+    char* isThePlace=strstr(input,symbol);
+        if(isThePlace!=NULL) {
+            potision = ((isThePlace) -input );
+            return potision;
+    }
+    return -1;
+}
+
+/*release the memory from the argv*/
+void garbageCollector(char** argv,int size)
+{
+    int i=RESET;
+    for (i = RESET; i < size; ++i) {
+        free(argv[i]);
+    }
+    free(argv);
+    argv=NULL;
+}
+
+
+/*split the input from the user to sub strings*/
+char** execFunction(char *input,char **argv,int *sizeOfArray,int *cmdLength)
+{
+    int i=RESET,counter=RESET;
+    char inputCopy[INPUT_SIZE];
+    strcpy(inputCopy,input);
+
+    char* ptr= strtok(input,CUTTING_WORD);
+    while(ptr!=NULL)
+    {
+        ptr=strtok(NULL,CUTTING_WORD);
+        counter++;
+    }
+    argv = (char**)malloc((counter+1)*(sizeof(char*)));
+    if(argv==NULL)
+    {
+        printf("error allocated");
+        exit(RESET);
+    }
+
+    char* ptrCopy= strtok(inputCopy,CUTTING_WORD);
+    while(ptrCopy!=NULL)
+    {
+        if (i==RESET && (strcmp(ptrCopy,"cd")!=0))
+            (*cmdLength)+=strlen(ptrCopy);
+        argv[i]=(char*)malloc((sizeof(char)+1)*strlen(ptrCopy));
+        if(argv[i]==NULL)
+        {
+            printf("error allocated");
+            for (int j = i-1; j >-1 ; j--) {
+                free(argv[j]);
+            }
+            free(argv);
+            exit(RESET);
+        }
+        strcpy(argv[i],ptrCopy);
+        argv[i][strlen(ptrCopy)]='\0';
+        ptrCopy=strtok(NULL,CUTTING_WORD );
+        i++;
+    }
+    argv[counter]=NULL;
+    (*sizeOfArray)=counter;
+    return argv;
+
+}
+
+
+/*show the prompt to the screen*/
+void DisplayPrompt()
+{
+
+//-------------------show the path-----------------------------
+
+    long size;
+    char *buf;
+    char *ptr;
+
+    size = pathconf(".", _PC_PATH_MAX);
+
+    if ((buf = (char *)malloc((size_t)size)) != NULL)
+        ptr = getcwd(buf, (size_t)size);
+
+
+    //----------show the user name root------------------------
+
+    struct passwd *getpwuid(uid_t uid);
+    struct passwd *p;
+    uid_t uid=0;
+    if ((p = getpwuid(uid)) == NULL)
+        perror("getpwuid() error");
+    else {
+        printf("%s@%s>", p->pw_name, ptr);
+    }
+    free(buf);
 }
