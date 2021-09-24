@@ -1,15 +1,10 @@
 Name     : Kapuluru Vikas reddy
 Roll No. : 200101051
 
-This program uses readline library,
-If not installed already, use this command to install:
-   
-   sudo apt-get install libreadline-dev
-
 cd into the directory with the program
 
 command to compile 
-gcc 200101051_Assign.c -lreadline
+gcc 200101051_Assign.c 
 
 command to execute
 ./a.out

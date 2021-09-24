@@ -1,24 +1,25 @@
-#include <signal.h>
-#include <stdio.h>
-#include <sys/types.h>
-#include <pwd.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <sys/wait.h>
-#include <string.h>
-#include <sys/mman.h>
-#include <errno.h>
+#include<signal.h>
+#include<stdio.h>
+#include<sys/types.h>
+#include<pwd.h>
+#include<stdlib.h>
+#include<unistd.h>
+#include<sys/wait.h>
+#include<string.h>
+#include<sys/mman.h>
+#include<errno.h>
 
 #define INPUT_SIZE 1024 //The length of the maximum string for the user
 #define clear() printf("\033[H\033[J") // Clearing the shell using escape sequences
-#define CUTTING_WORD " \n"//For dividing a string into single words (using in strtok)
+#define DIVIDE_AT " \n"//For dividing a string into single words (using in strtok)
 #define ENDING_WORD "exit"//Program end word
 #define RESET 0
 
 // Private Function declaration
+void help(); // Help command builtin
 void sig_handler(int signo);
 char *getcwd(char *buf, size_t size);//show the path Of the current folder
-void  DisplayPrompt();//Display Prompt : user@currect dir>
+void DisplayPrompt();//Display Prompt : user@currect dir>
 void releaseMemory(char** argv);
 int checkSymbol(char* symbol,char* input);
 void garbageCollector(char** argv,int size); //Memory Release
@@ -31,6 +32,7 @@ static int *cmdLength;
 
 
 int main() {
+
     signal(SIGINT,sig_handler);
     
     numOfCmd = mmap(NULL, sizeof *numOfCmd, PROT_READ | PROT_WRITE,
@@ -43,6 +45,12 @@ int main() {
     int sizeOfArray=RESET;
     
     char input[INPUT_SIZE]="";//A string array containing the input.
+    clear();
+    printf("USER is: @%s\n", getenv("USER"));
+    printf("PATH is: @%s\n", getenv("PATH"));
+    printf("HOME is: @%s\n", getenv("HOME"));
+    printf("SHELL is: @%s\n", getenv("SHELL"));
+    printf("TERM is: @%s\n", getenv("TERM"));
     DisplayPrompt();
     pid_t id; // pid_t used for process identifer
     char **argv;//A string array containing the program name and command arguments
@@ -88,6 +96,42 @@ int main() {
                     printf("error changing dircatory");
                 garbageCollector(argv,sizeOfArray);
             }
+            else if (strcmp("help",argv[RESET])==RESET)//if the user tries help command
+            {
+                help();
+                DisplayPrompt();
+            } 
+            else if (strcmp("setenv", argv[RESET])==RESET)//if the user tries setenv command
+            {
+                if (sizeOfArray!=4) {
+                    printf("ERROR: Invalid format or characters found\n"
+                    "setting environment failed, make sure there are " 
+                    "no spaces, symbols or newline characters in the environment value "
+                    "\nuse format  setenv varname = value (spaces are necessary)\n"
+                    );
+                } 
+                else if (sizeOfArray==4 && strcmp(argv[2], "=")!=0){
+                    printf("ERROR: Invalid format or characters found\n"
+                    "setting environment failed, make sure there are " 
+                    "no spaces, symbols or newline characters in the environment value "
+                    "\nuse format  setenv varname = value (spaces are necessary)\n"
+                    );
+                }
+                else {
+                    int setSuccessful = setenv(argv[RESET+1], argv[RESET+3], 1);
+                    if (!setSuccessful) {
+                        printf("environment variable%s is set to %s\n "
+                        "use printenv <varname> to see env variable value\n", argv[RESET+1], argv[RESET+3]);
+                    } 
+                    else {
+                        printf("ERROR: Invalid format or characters found\n"
+                        "setting environment failed, make sure there are" 
+                        "no spaces, symbols or newline characters in the environment value");
+                    }
+                }
+                DisplayPrompt();
+           }
+            
             else
             {
                 id=fork();//make new prosses
@@ -125,6 +169,22 @@ int main() {
 }
 
 
+void help()
+{
+    puts("\nList of Commands supported:"
+        "\n>'man', 'which', 'chsh', 'whereis', 'passwd', 'date', 'cal', 'clear', 'sleep',"
+        "'apropos', 'exit', 'shutdown', 'ls', 'cat', 'more', 'less', 'touch', 'cp',"
+        "'mv', 'rm', 'script', 'find', 'mkdir', 'cd', 'pwd', 'rmdir', 'chmod', 'grep'\n"
+        "\n>pipe handling"
+        "\n>improper space handling\n"
+        "\n>List of Commands not supported"
+        "\n> 'alias', 'unalias', 'history', 'logout'\n"
+        "\n>redirection not supported"
+        "\n>tab completion not supported");
+
+    return;
+}
+
 void sig_handler(int signo)
 {
     signal(SIGINT,sig_handler);
@@ -133,6 +193,7 @@ void sig_handler(int signo)
     sigfillset(&curr_mask);
     sigprocmask(SIG_SETMASK,&curr_mask,NULL);
 }
+
 void releaseMemory(char** argv)
 {
     for (int i = 0; argv[i]!=NULL ; i++) {
@@ -141,13 +202,13 @@ void releaseMemory(char** argv)
     free(argv);
 }
 
-
 void ArrayOfSymbol(char* symbol,char* inputCopy,int place,char** argv,int sizeOfArray)
 {
 
     char** command1;char** command2;int size1=0,size2=0,j;
     char* before=strndup(inputCopy,place);
     char* after=strdup(inputCopy+strlen(before)+1);
+    
     //copy left side command
     for (int i = 0; i < sizeOfArray; i++) {
         if (strcmp(argv[i], "|") != 0) {
@@ -248,7 +309,6 @@ void LeftRightPipe(char* symbol,char** command1,char** command2,char** argv)
     }
 }
 
-
 int checkSymbol(char* symbol,char* input)
 {
     int potision;
@@ -271,7 +331,6 @@ void garbageCollector(char** argv,int size)
     argv=NULL;
 }
 
-
 //split the input from the user to sub strings
 char** execFunction(char *input,char **argv,int *sizeOfArray,int *cmdLength)
 {
@@ -279,10 +338,10 @@ char** execFunction(char *input,char **argv,int *sizeOfArray,int *cmdLength)
     char inputCopy[INPUT_SIZE];
     strcpy(inputCopy,input);
 
-    char* ptr= strtok(input,CUTTING_WORD);
+    char* ptr= strtok(input,DIVIDE_AT);
     while(ptr!=NULL)
     {
-        ptr=strtok(NULL,CUTTING_WORD);
+        ptr=strtok(NULL,DIVIDE_AT);
         counter++;
     }
     argv = (char**)malloc((counter+1)*(sizeof(char*)));
@@ -292,7 +351,7 @@ char** execFunction(char *input,char **argv,int *sizeOfArray,int *cmdLength)
         exit(RESET);
     }
 
-    char* ptrCopy= strtok(inputCopy,CUTTING_WORD);
+    char* ptrCopy= strtok(inputCopy,DIVIDE_AT);
     while(ptrCopy!=NULL)
     {
         if (i==RESET && (strcmp(ptrCopy,"cd")!=0))
@@ -309,7 +368,7 @@ char** execFunction(char *input,char **argv,int *sizeOfArray,int *cmdLength)
         }
         strcpy(argv[i],ptrCopy);
         argv[i][strlen(ptrCopy)]='\0';
-        ptrCopy=strtok(NULL,CUTTING_WORD );
+        ptrCopy=strtok(NULL,DIVIDE_AT );
         i++;
     }
     argv[counter]=NULL;
@@ -318,11 +377,9 @@ char** execFunction(char *input,char **argv,int *sizeOfArray,int *cmdLength)
 
 }
 
-
 //show the prompt on the screen
 void DisplayPrompt()
 {
-    clear();
 
 // show the path
 
